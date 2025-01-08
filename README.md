@@ -1,4 +1,4 @@
-![Engineer's Odyssey](images\banner.png)
+<img width="1400" alt="banner" src="images/banner.png" />
 
 *Where Technology Meets Adventure*
 
