@@ -22,6 +22,6 @@ jobs:
           
       - name: Create Release
         run: |
-          python scripts/github_release.py \
+          python scripts/release.py \
             --token ${{ secrets.GITHUB_TOKEN }} \
             --repo ${{ github.repository }}

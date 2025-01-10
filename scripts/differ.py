@@ -56,6 +56,34 @@ class ModpackDiffer:
         
         versions.sort(key=lambda x: x[0], reverse=True)
         return [v[1] for v in versions[:2]]
+    
+    def _get_base_mod_name(self, mod_name: str) -> str:
+        parts = mod_name.split('-')
+        if len(parts) >= 3:
+            return f"{parts[0]}-{parts[-1]}"
+        return mod_name
+
+    def _extract_version_from_path(self, path: str) -> str:
+        filename = path.replace('.jar', '')
+        
+        version_patterns = [
+            # Pattern for version after MC version: mod-1.20-2.13.47-fabric
+            r'-1\.\d+(?:\.\d+)?-(\d+\.\d+\.\d+)',
+            # Pattern for version before MC version: mod-2.13.47-1.20-fabric
+            r'-(\d+\.\d+\.\d+)-1\.\d+',
+            # Pattern for standalone version: mod-2.13.47-fabric
+            r'-(\d+\.\d+\.\d+)-\w+$',
+            # Pattern for version at end: mod-fabric-2.13.47
+            r'-(\d+\.\d+\.\d+)$'
+        ]
+        
+        import re
+        for pattern in version_patterns:
+            match = re.search(pattern, filename)
+            if match:
+                return match.group(1)
+        
+        return "unknown"
 
     def _extract_mod_info(self, index_data: dict) -> Dict[str, ModInfo]:
         mods = {}
@@ -64,7 +92,7 @@ class ModpackDiffer:
                 continue
                 
             mod_name = os.path.basename(file['path']).replace('.jar', '')
-            version = self._extract_version_from_filename(mod_name)
+            version = self._extract_version_from_path(file['path'])
             
             mods[mod_name] = ModInfo(
                 path=file['path'],
@@ -104,31 +132,63 @@ class ModpackDiffer:
         removed_mods = []
         updated_mods = []
 
-        for mod_name, mod_info in new_mods.items():
-            if mod_name not in old_mods:
-                added_mods.append(f"- {mod_name} ({mod_info.version})")
-            elif old_mods[mod_name].version != mod_info.version:
-                updated_mods.append(
-                    f"- {mod_name}: {old_mods[mod_name].version} → {mod_info.version}"
-                )
+        # Create dictionaries with base mod names for comparison
+        new_mods_base = {self._get_base_mod_name(name): (name, info) 
+                        for name, info in new_mods.items()}
+        old_mods_base = {self._get_base_mod_name(name): (name, info) 
+                        for name, info in old_mods.items()}
 
-        for mod_name in old_mods:
-            if mod_name not in new_mods:
-                removed_mods.append(f"- {mod_name} ({old_mods[mod_name].version})")
+        # Debug print
+        print("\nProcessing mod versions:")
+        
+        # Compare mods
+        for base_name, (new_name, new_info) in new_mods_base.items():
+            if base_name in old_mods_base:
+                old_name, old_info = old_mods_base[base_name]
+                print(f"{base_name}: old={old_info.version}, new={new_info.version}")
+                if (old_info.version != new_info.version and 
+                    old_info.version != "unknown" and 
+                    new_info.version != "unknown"):
+                    updated_mods.append(
+                        f"- {base_name}: {old_info.version} → {new_info.version}"
+                    )
+            else:
+                if new_info.version != "unknown":
+                    added_mods.append(f"- {new_name} ({new_info.version})")
+                else:
+                    added_mods.append(f"- {new_name}")
+
+        for base_name, (old_name, old_info) in old_mods_base.items():
+            if base_name not in new_mods_base:
+                if old_info.version != "unknown":
+                    removed_mods.append(f"- {old_name} ({old_info.version})")
+                else:
+                    removed_mods.append(f"- {old_name}")
 
         # Generate changelog
-        changelog = [
-            f"# Changelog: {new_version} (compared to {old_version})",
-            "",
-            f"## Added Mods ({len(added_mods)})",
-            *sorted(added_mods),
-            "",
-            f"## Removed Mods ({len(removed_mods)})",
-            *sorted(removed_mods),
-            "",
-            f"## Updated Mods ({len(updated_mods)})",
-            *sorted(updated_mods)
-        ]
+        changelog = [f"# Changelog: {new_version} (compared to {old_version})"]
+    
+        # Only add sections with content
+        if added_mods:
+            changelog.extend([
+                "",
+                f"## Added Mods ({len(added_mods)})",
+                *sorted(added_mods)
+            ])
+            
+        if removed_mods:
+            changelog.extend([
+                "",
+                f"## Removed Mods ({len(removed_mods)})",
+                *sorted(removed_mods)
+            ])
+            
+        if updated_mods:
+            changelog.extend([
+                "",
+                f"## Updated Mods ({len(updated_mods)})",
+                *sorted(updated_mods)
+            ])
 
         return "\n".join(changelog)
 
