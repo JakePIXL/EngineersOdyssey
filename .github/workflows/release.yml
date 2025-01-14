@@ -13,9 +13,6 @@ jobs:
 
       - name: Install the latest version of uv
         uses: astral-sh/setup-uv@v5
-
-      - name: Move to scripts folder
-        run: cd scripts
       
       # - name: Set up Python
       #   uses: actions/setup-python@v2
@@ -27,7 +24,8 @@ jobs:
       #     pip install PyGithub 
           
       - name: Create Release
+        working-directory: ./scripts
         run: |
-          uv run release.py \
+          uv run python release.py \
             --token ${{ secrets.GITHUB_TOKEN }} \
             --repo ${{ github.repository }}
