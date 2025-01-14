@@ -10,18 +10,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+
+      - name: Install the latest version of uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Move to scripts folder
+        run: cd scripts
       
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: '3.x'
+      # - name: Set up Python
+      #   uses: actions/setup-python@v2
+      #   with:
+      #     python-version: '3.x'
           
-      - name: Install dependencies
-        run: |
-          pip install PyGithub
+      # - name: Install dependencies
+      #   run: |
+      #     pip install PyGithub 
           
       - name: Create Release
         run: |
-          python scripts/release.py \
+          uv run release.py \
             --token ${{ secrets.GITHUB_TOKEN }} \
             --repo ${{ github.repository }}

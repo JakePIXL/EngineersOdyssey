@@ -58,23 +58,31 @@ class ModpackDiffer:
         return [v[1] for v in versions[:2]]
     
     def _get_base_mod_name(self, mod_name: str) -> str:
-        parts = mod_name.split('-')
-        if len(parts) >= 3:
-            return f"{parts[0]}-{parts[-1]}"
+        mod_name = mod_name.replace('.jar', '')
+        
+        import re
+        mod_name = re.sub(r'-(?:mc)?1\.\d+(?:\.\d+)*', '', mod_name)
+        
+        mod_name = re.sub(r'-\d+(?:\.\d+)*(?:-[a-zA-Z]+)?$', '', mod_name)
+        
+        mod_name = re.sub(r'-(?:fabric|forge)$', '', mod_name)
+        
         return mod_name
 
     def _extract_version_from_path(self, path: str) -> str:
-        filename = path.replace('.jar', '')
+        filename = os.path.basename(path).replace('.jar', '')
         
         version_patterns = [
-            # Pattern for version after MC version: mod-1.20-2.13.47-fabric
-            r'-1\.\d+(?:\.\d+)?-(\d+\.\d+\.\d+)',
-            # Pattern for version before MC version: mod-2.13.47-1.20-fabric
-            r'-(\d+\.\d+\.\d+)-1\.\d+',
-            # Pattern for standalone version: mod-2.13.47-fabric
-            r'-(\d+\.\d+\.\d+)-\w+$',
-            # Pattern for version at end: mod-fabric-2.13.47
-            r'-(\d+\.\d+\.\d+)$'
+            # Version after MC version: mod-1.20-2.13.47-fabric
+            r'-1\.\d+(?:\.\d+)*-(\d+\.\d+\.\d+)',
+            # Version before MC version: mod-2.13.47-1.20-fabric
+            r'-(\d+\.\d+\.\d+)(?:-1\.\d+)',
+            # Version at end: mod-fabric-2.13.47
+            r'-(\d+\.\d+\.\d+)$',
+            # Version with build/fabric suffix: mod-2.13.47+build.123
+            r'-(\d+\.\d+\.\d+)(?:\+[a-zA-Z0-9\.]+)?$',
+            # Fallback for any version-like pattern
+            r'(?:^|[^0-9])(\d+\.\d+\.\d+)(?:[^0-9]|$)'
         ]
         
         import re
@@ -113,6 +121,7 @@ class ModpackDiffer:
                         return part
         return "unknown"
 
+
     def generate_changelog(self) -> str:
         latest_versions = self._get_latest_versions()
         if len(latest_versions) < 2:
@@ -127,48 +136,48 @@ class ModpackDiffer:
         new_mods = self._extract_mod_info(new_data)
         old_mods = self._extract_mod_info(old_data)
 
-        # Compare versions
+        # Create dictionaries with base mod names for comparison
+        new_mods_base = {}
+        old_mods_base = {}
+        
+        for name, info in new_mods.items():
+            base_name = self._get_base_mod_name(name)
+            new_mods_base[base_name] = (name, info)
+        
+        for name, info in old_mods.items():
+            base_name = self._get_base_mod_name(name)
+            old_mods_base[base_name] = (name, info)
+
+        # Compare mods
         added_mods = []
         removed_mods = []
         updated_mods = []
 
-        # Create dictionaries with base mod names for comparison
-        new_mods_base = {self._get_base_mod_name(name): (name, info) 
-                        for name, info in new_mods.items()}
-        old_mods_base = {self._get_base_mod_name(name): (name, info) 
-                        for name, info in old_mods.items()}
-
-        # Debug print
-        print("\nProcessing mod versions:")
-        
-        # Compare mods
+        # Find updates and additions
         for base_name, (new_name, new_info) in new_mods_base.items():
             if base_name in old_mods_base:
                 old_name, old_info = old_mods_base[base_name]
-                print(f"{base_name}: old={old_info.version}, new={new_info.version}")
                 if (old_info.version != new_info.version and 
                     old_info.version != "unknown" and 
                     new_info.version != "unknown"):
-                    updated_mods.append(
-                        f"- {base_name}: {old_info.version} → {new_info.version}"
-                    )
+                    updated_mods.append(f"- {base_name}: {old_info.version} → {new_info.version}")
             else:
+                mod_entry = f"- {new_name}"
                 if new_info.version != "unknown":
-                    added_mods.append(f"- {new_name} ({new_info.version})")
-                else:
-                    added_mods.append(f"- {new_name}")
+                    mod_entry += f" ({new_info.version})"
+                added_mods.append(mod_entry)
 
+        # Find removals
         for base_name, (old_name, old_info) in old_mods_base.items():
             if base_name not in new_mods_base:
+                mod_entry = f"- {old_name}"
                 if old_info.version != "unknown":
-                    removed_mods.append(f"- {old_name} ({old_info.version})")
-                else:
-                    removed_mods.append(f"- {old_name}")
+                    mod_entry += f" ({old_info.version})"
+                removed_mods.append(mod_entry)
 
         # Generate changelog
         changelog = [f"# Changelog: {new_version} (compared to {old_version})"]
-    
-        # Only add sections with content
+        
         if added_mods:
             changelog.extend([
                 "",
@@ -191,6 +200,7 @@ class ModpackDiffer:
             ])
 
         return "\n".join(changelog)
+
 
 def main():
     script_dir = Path(__file__).parent.parent
