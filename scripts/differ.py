@@ -61,6 +61,8 @@ class ModpackDiffer:
         mod_name = mod_name.replace('.jar', '')
         
         import re
+        mod_name = re.sub(r'-\d+\.\d+\.\d+\+.*?(?=-|$)', '', mod_name)
+        
         mod_name = re.sub(r'-(?:mc)?1\.\d+(?:\.\d+)*', '', mod_name)
         
         mod_name = re.sub(r'-\d+(?:\.\d+)*(?:-[a-zA-Z]+)?$', '', mod_name)
